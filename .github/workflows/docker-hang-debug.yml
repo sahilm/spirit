@@ -1,0 +1,39 @@
+name: stuff
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: JarvusInnovations/background-action@v1
+        with:
+          run: docker compose up mysql mysql_replica &
+          wait-on: |
+            tcp:localhost:8033
+            tcp:localhost:8133
+          working-directory: compose/replication
+          tail: stderr,stdout
+          log-output: stderr,stdout
+          log-output-resume: stderr,stdout
+          log-output-if: true
+
+      - uses: JarvusInnovations/background-action@v1
+        with:
+          run: mysqladmin -h127.0.0.1 --port 8033 -uroot -pmsandbox -i10 processlist status &
+          wait-on: |
+            tcp:localhost:8033
+            tcp:localhost:8133
+          tail: stderr,stdout
+          log-output: stderr,stdout
+          log-output-resume: stderr,stdout
+          log-output-if: true
+
+      - run: while true; do MYSQL_DSN='tsandbox:msandbox@tcp(127.0.0.1:8033)/test' REPLICA_DSN='rsandbox:rsandbox@tcp(127.0.0.1:8133)/' go test -race -v -count=1 ./...; done
+        shell: bash
